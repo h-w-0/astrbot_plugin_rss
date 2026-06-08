@@ -1,4 +1,4 @@
-name: astrbot_plugin_rss_push
+name: Wikidot 论坛消息RSS推送
 desc: RSS 主动推送插件——定时获取 RSS 新条目并推送到 QQ 群
 author: H_W
 version: 1.0.0
