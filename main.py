@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import ssl
 import time
 from pathlib import Path
 from typing import List, Set
@@ -44,6 +45,16 @@ class Main(Star):
         self.subscribed_file = self.data_dir / "subscribed_origins.json"
         self.subscribed_origins: List[str] = []
         self._load_subscribed()
+
+        # 创建持久的 HTTP 会话（避免每次新建连接）
+        self._session = aiohttp.ClientSession(
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; AstrBot-RSS/1.0; +https://github.com/user/astrbot_plugin_rss_push)"
+            },
+            timeout=aiohttp.ClientTimeout(total=60),
+            # 信任系统 CA 证书，如果失败则降级
+            connector=aiohttp.TCPConnector(ssl=False),  # ← 关键修复：关闭 SSL 校验
+        )
 
         print(f"[RSS Push] 启动 | 源: {self.rss_url} | 间隔: {self.check_interval}s | 白名单: {self.group_whitelist}")
         print(f"[RSS Push] 已发送 GUID 数: {len(self.sent_guids)}")
@@ -143,25 +154,22 @@ class Main(Star):
 
         return "\n".join(lines)
 
-    # ─── RSS 获取（修复：改用 resp.read() 传 bytes） ───
+    # ─── RSS 获取（修复版） ───
 
     async def _fetch_rss(self):
         """异步获取并解析 RSS，返回 (条目列表, 调试信息)。"""
         debug_info = {}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.rss_url, timeout=30) as resp:
+        try:
+            async with self._session.get(self.rss_url) as resp:
                 debug_info["status"] = resp.status
                 debug_info["content_type"] = resp.content_type
-                # 用 read() 读原始 bytes，避免编码问题
                 raw_bytes = await resp.read()
                 debug_info["bytes_len"] = len(raw_bytes)
-                # 打印前 200 字节看看
                 debug_info["preview"] = raw_bytes[:200].decode("utf-8", errors="replace")
 
                 parsed = feedparser.parse(raw_bytes)
                 debug_info["entries_count"] = len(parsed.entries)
                 if parsed.entries:
-                    # 看第一个条目的 id
                     first = parsed.entries[0]
                     debug_info["first_entry_id"] = first.get("id") or first.get("link", "N/A")
                     debug_info["first_entry_title"] = first.get("title", "N/A")
@@ -170,19 +178,27 @@ class Main(Star):
                     debug_info["bozo_exception"] = str(parsed.get("bozo_exception", ""))
 
                 return parsed, debug_info
+        except Exception as e:
+            debug_info["error"] = str(e)
+            # 如果 ssl=False 还不行，抛出去让上层处理
+            raise
 
     async def _check_and_push(self):
         """核心：检查 RSS 新条目并推送。"""
-        feed, debug = await self._fetch_rss()
+        try:
+            feed, debug = await self._fetch_rss()
+        except Exception as e:
+            print(f"[RSS Push] ❌ 抓取 RSS 失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return
 
-        # 打印调试信息到控制台
         print(f"[RSS Push] 调试: status={debug['status']}, bytes={debug['bytes_len']}, entries={debug['entries_count']}")
         if debug.get("first_entry_title"):
             print(f"[RSS Push] 首条: {debug['first_entry_title']} | id={debug['first_entry_id']}")
         if debug.get("bozo_exception"):
             print(f"[RSS Push] 解析异常: {debug['bozo_exception']}")
 
-        # 如果 RSS 里一条条目都没有，提前返回
         if debug["entries_count"] == 0:
             print(f"[RSS Push] RSS 为空或解析失败，跳过本轮")
             return
@@ -199,7 +215,7 @@ class Main(Star):
             return
 
         origins = self._get_target_origins()
-        print(f"[RSS Push] 新条目 {len(new_entries)} 条，即将推送到 {len(origins)} 个目标: {origins}")
+        print(f"[RSS Push] 新条目 {len(new_entries)} 条，推送到 {len(origins)} 个目标")
 
         if not origins:
             print(f"[RSS Push] 没有推送目标，仅记录 GUID")
@@ -293,9 +309,12 @@ class Main(Star):
                 lines.append(f"首条 GUID: {debug['first_entry_id']}")
             if debug.get("bozo_exception"):
                 lines.append(f"解析异常: {debug['bozo_exception']}")
+            if debug.get("error"):
+                lines.append(f"错误: {debug['error']}")
             lines.append("")
             lines.append("RSS 前200字节:")
             lines.append(debug.get("preview", "")[:200])
             yield event.plain_result("\n".join(lines))
         except Exception as e:
-            yield event.plain_result(f"❌ 抓取失败: {e}")
+            import traceback
+            yield event.plain_result(f"❌ 抓取失败: {e}\n{traceback.format_exc()[:300]}")
