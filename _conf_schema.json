@@ -1,0 +1,26 @@
+{
+  "rss_url": {
+    "description": "RSS 订阅源地址",
+    "type": "string",
+    "default": "https://lostmedia.wikidot.com/feed/forum/posts.xml",
+    "hint": "填入完整的 RSS Feed XML 地址"
+  },
+  "check_interval": {
+    "description": "检查间隔（秒）",
+    "type": "int",
+    "default": 300,
+    "hint": "每隔多少秒检查一次 RSS 是否有新内容，默认5分钟"
+  },
+  "rss_title": {
+    "description": "推送消息的标题行",
+    "type": "string",
+    "default": "失传媒体中文维基 论坛新消息",
+    "hint": "推送消息最顶部的标题"
+  },
+  "group_whitelist": {
+    "description": "推送群聊白名单（群号列表）",
+    "type": "list",
+    "default": [],
+    "hint": "格式如 [\"12345678\", \"87654321\"]，只有在此列表中的群号会收到推送"
+  }
+}
