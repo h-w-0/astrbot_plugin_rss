@@ -8,17 +8,23 @@
     "description": "检查间隔（秒）",
     "type": "int",
     "default": 300,
-    "hint": "每隔多少秒检查一次"
+    "hint": "每隔多少秒检查一次 RSS 是否有新内容"
   },
   "rss_title": {
     "description": "推送消息的标题行",
     "type": "string",
     "default": "失传媒体中文维基 论坛新消息"
   },
+  "platform": {
+    "description": "消息平台前缀",
+    "type": "string",
+    "default": "default",
+    "hint": "运行 /rss_debug_origin 查看 unified_msg_origin 的第一段，你的就是 default"
+  },
   "group_whitelist": {
     "description": "推送群聊白名单（群号列表）",
     "type": "list",
     "default": [],
-    "hint": "在 WebUI 中点添加，填入群号即可，如 690941089"
+    "hint": "在 WebUI 中点添加，填入群号即可"
   }
 }
