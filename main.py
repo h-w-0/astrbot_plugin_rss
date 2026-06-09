@@ -91,7 +91,7 @@ class Main(Star):
     def _detect_platform(self) -> str:
         if self.subscribed_origins:
             return self.subscribed_origins[0].split(":")[0]
-        return "aiocqhttp"
+        return self.config.get("platform", "default")
 
     def _get_target_origins(self) -> List[str]:
         origins = list(self.subscribed_origins)
