@@ -285,7 +285,23 @@ class Main(Star):
         if umo not in self.subscribed_origins:
             self.subscribed_origins.append(umo)
             self._save_subscribed()
-            yield event.plain_result(f"✅ 已订阅 RSS 推送！(origin={umo})")
+    
+            # ── 订阅时立即获取当前 RSS，全部标记为已读 ──
+            try:
+                feed = await self._fetch_rss()
+                count = 0
+                for entry in feed.entries:
+                    guid = getattr(entry, "id", None) or getattr(entry, "link", None) or ""
+                    if guid and guid not in self.sent_guids:
+                        self.sent_guids.add(guid)
+                        count += 1
+                self._save_sent_guids()
+                yield event.plain_result(
+                    f"✅ 已订阅 RSS 推送！并跳过当前 {count} 条已有帖子，之后的新帖子会自动推送。"
+                )
+            except Exception as e:
+                # 即使标记失败，订阅还是成功了
+                yield event.plain_result(f"✅ 已订阅 RSS 推送！（但获取当前 RSS 失败: {e}）")
         else:
             yield event.plain_result("ℹ️ 此群已订阅。")
 
